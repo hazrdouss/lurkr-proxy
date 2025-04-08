@@ -1,35 +1,51 @@
-addEventListener('fetch', event => {
-	event.respondWith(handleRequest(event.request))
-})
+export default {
+	async fetch(request, env) {
+		const token = env.LURKR_API_KEY;
+		return handleRequest(token);
+	},
+};
 
-async function handleRequest(request) {
-	const lurkrEndpoint = 'https://api.lurkr.gg/v2/levels/1356262077857267904/export';
-
-	const exportDataResponse = await fetch(lurkrEndpoint, {
-		method: 'POST',
-		headers: {
-			'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMTcxOTY3MzE5Mjg3Nzk5ODIwIiwiaWF0IjoxNzQzNDk4NzY4LCJleHAiOjE3NDQxMDM1Njh9.Mpqw9IVWbKnOgN3fXUTIKNyguZqPw6KaA-l765iBDrA',
-			'Content-Type': 'application/json',
-		},
-		body: JSON.stringify({}),
-	});
-
-	const exportData = await exportDataResponse.json();
-	const url = exportData.url;
-
-	const levelDataResponse = await fetch(url, {
-		method: 'GET',
-		headers: {
-			'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMTcxOTY3MzE5Mjg3Nzk5ODIwIiwiaWF0IjoxNzQzNDk4NzY4LCJleHAiOjE3NDQxMDM1Njh9.Mpqw9IVWbKnOgN3fXUTIKNyguZqPw6KaA-l765iBDrA',
-		}
-	})
-
+async function getLevelData(url) {
+	const levelDataResponse = await fetch(url, { method: 'GET'})
 	const levelData = await levelDataResponse.json();
 
-	return new Response(JSON.stringify({
+	return {
 		"length": levelData.levels.length,
-		...levelData,
-	}), {
-		headers: { 'Content-Type': 'application/json' },
+		...levelData
+	}
+}
+
+async function handleRequest(token) {
+	const lurkrExportEndpoint = 'https://api.lurkr.gg/v2/levels/1356262077857267904/export';
+	let exportData = null;
+
+	const exportDataResponse = await fetch(lurkrExportEndpoint, {
+		method: 'GET',
+		headers: {
+			'Authorization': `Bearer ${token}`,
+		},
 	});
+
+	exportData = await exportDataResponse.json();
+
+	if (exportData.message === 'No leveling data exports found') {
+		const postResponse = await fetch(lurkrExportEndpoint, {
+			method: 'POST',
+			headers: {
+				'Authorization': `Bearer ${token}`,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({}),
+		});
+
+		exportData = await postResponse.json();
+	}
+
+	if (!exportData.url) {
+		return new Response(JSON.stringify({"error": true, "message": exportData.message}))
+	}
+
+	const levelData = await getLevelData(exportData.url);
+
+	return new Response(JSON.stringify({"error": false, levelData}));
 }
